@@ -1,0 +1,1009 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>RunInk</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Turn your GPX runs into beautiful poster art. Customize colors, gradients, effects and export at print quality."
+    />
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Manrope Font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- html2canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family: 'Manrope', sans-serif;
+        transition:
+          background-color 0.3s ease,
+          color 0.3s ease;
+      }
+
+      #app {
+        display: flex;
+        height: 100vh;
+        width: 100%;
+        position: relative;
+        overflow: hidden;
+      }
+
+      #map {
+        flex: 1;
+      }
+
+      /* ── Upload ── */
+      #file-upload-wrapper {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1002;
+        transition: opacity 0.5s ease;
+        text-align: center;
+      }
+      #file-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        background: rgba(255, 255, 255, 0.72);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        padding: 1.1rem 1.8rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+        font-size: 1.05rem;
+        font-weight: 600;
+        cursor: pointer;
+        color: #111;
+        border: 1.5px solid rgba(255, 255, 255, 0.9);
+        transition:
+          background 0.2s ease,
+          transform 0.15s ease;
+      }
+      #file-label:hover {
+        background: rgba(255, 255, 255, 0.9);
+        transform: scale(1.02);
+      }
+      #file-label input[type='file'] {
+        display: none;
+      }
+      #upload-icon {
+        width: 1.25rem;
+        height: 1.25rem;
+      }
+      .fade-in {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* ── Customizer Panel ── */
+      #customizer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 310px;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.72);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        box-shadow: -2px 0 20px rgba(0, 0, 0, 0.15);
+        padding: 1.1rem 14px 2rem;
+        overflow-y: auto;
+        overflow-x: hidden;
+        z-index: 1001;
+        border-left: 1px solid rgba(255, 255, 255, 0.45);
+        transition:
+          opacity 0.6s ease,
+          transform 0.6s ease;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+      }
+      #customizer::-webkit-scrollbar {
+        width: 5px;
+      }
+      #customizer::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.15);
+        border-radius: 8px;
+      }
+      #customizer.hidden {
+        opacity: 0;
+        transform: translateX(100%);
+        pointer-events: none;
+      }
+
+      /* ── Section headers ── */
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #888;
+        margin: 1.2rem 0 0.55rem;
+        padding-bottom: 5px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      }
+      .section-header:first-child {
+        margin-top: 0.2rem;
+      }
+      .section-header svg {
+        opacity: 0.55;
+      }
+
+      /* ── Labels / fields ── */
+      label {
+        display: block;
+        margin-bottom: 0.65rem;
+        font-size: 0.88rem;
+        font-weight: 500;
+        line-height: 1.4;
+        color: #333;
+      }
+      label span.label-text {
+        display: block;
+        margin-bottom: 4px;
+        color: #555;
+        font-size: 0.82rem;
+      }
+
+      input[type='number'],
+      input[type='color'],
+      select,
+      input[type='range'] {
+        width: 100%;
+        margin-top: 3px;
+        padding: 0.38rem 0.5rem;
+        font-size: 0.88rem;
+        font-family: 'Manrope', sans-serif;
+        border: 1px solid rgba(0, 0, 0, 0.18);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.85);
+        color: #111;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      input:focus,
+      select:focus {
+        border-color: #666;
+      }
+      input[type='range'] {
+        padding: 0;
+        height: 3px;
+        cursor: pointer;
+      }
+      input[type='color'] {
+        padding: 2px;
+        height: 32px;
+        cursor: pointer;
+      }
+
+      /* ── Two-column row ── */
+      .row-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 0.65rem;
+      }
+      .row-2 label {
+        margin-bottom: 0;
+      }
+
+      /* ── Toggle row ── */
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.65rem;
+      }
+      .toggle-row .toggle-label {
+        font-size: 0.88rem;
+        font-weight: 500;
+        color: #333;
+      }
+      /* pill toggle */
+      .pill-toggle {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 22px;
+        flex-shrink: 0;
+      }
+      .pill-toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .pill-toggle .slider {
+        position: absolute;
+        inset: 0;
+        background: #ccc;
+        border-radius: 22px;
+        transition: background 0.2s;
+        cursor: pointer;
+      }
+      .pill-toggle .slider::before {
+        content: '';
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        left: 3px;
+        top: 3px;
+        background: white;
+        border-radius: 50%;
+        transition: transform 0.2s;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+      }
+      .pill-toggle input:checked + .slider {
+        background: #111;
+      }
+      .pill-toggle input:checked + .slider::before {
+        transform: translateX(18px);
+      }
+
+      /* Sub-options shown/hidden based on toggle */
+      .sub-options {
+        padding-left: 4px;
+        margin-top: 4px;
+      }
+      .sub-options.hidden {
+        display: none;
+      }
+
+      /* Color pair (gradient from / to) */
+      .color-pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .color-pair label {
+        margin-bottom: 0;
+      }
+
+      /* ── Buttons ── */
+      .btn {
+        width: 100%;
+        padding: 0.6rem;
+        font-size: 0.92rem;
+        font-weight: 600;
+        font-family: 'Manrope', sans-serif;
+        border: none;
+        border-radius: 7px;
+        cursor: pointer;
+        transition:
+          background 0.18s ease,
+          transform 0.1s ease;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .btn:active {
+        transform: scale(0.98);
+      }
+      .btn-primary {
+        background: #111;
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: #2a2a2a;
+      }
+      .btn-secondary {
+        background: rgba(0, 0, 0, 0.07);
+        color: #222;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+      }
+      .btn-secondary:hover {
+        background: rgba(0, 0, 0, 0.13);
+      }
+      .btn-accent {
+        background: linear-gradient(135deg, #6c63ff, #48c6ef);
+        color: white;
+      }
+      .btn-accent:hover {
+        opacity: 0.9;
+      }
+
+      /* ── Range with value label ── */
+      .range-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .range-row input[type='range'] {
+        flex: 1;
+        margin-top: 0;
+      }
+      .range-val {
+        font-size: 0.78rem;
+        color: #666;
+        min-width: 28px;
+        text-align: right;
+        font-weight: 600;
+      }
+
+      /* ── App title ── */
+      .panel-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.2rem;
+        color: #111;
+      }
+      .panel-sub {
+        font-size: 0.76rem;
+        color: #888;
+        margin-bottom: 0.6rem;
+      }
+
+      /* ── Dark mode ── */
+      body.dark-mode {
+        background-color: #121212;
+        color: #f0f0f0;
+      }
+
+      body.dark-mode #file-label {
+        background: rgba(30, 30, 30, 0.82);
+        color: white;
+        border-color: rgba(255, 255, 255, 0.15);
+      }
+      body.dark-mode #customizer {
+        background: rgba(18, 18, 18, 0.88);
+        border-left: 1px solid rgba(255, 255, 255, 0.08);
+        color: white;
+        box-shadow: -2px 0 20px rgba(0, 0, 0, 0.55);
+      }
+      body.dark-mode .section-header {
+        color: #777;
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+      body.dark-mode label,
+      body.dark-mode label span.label-text {
+        color: #ccc;
+      }
+      body.dark-mode .toggle-row .toggle-label {
+        color: #ccc;
+      }
+      body.dark-mode .panel-title {
+        color: #f0f0f0;
+      }
+      body.dark-mode .panel-sub {
+        color: #666;
+      }
+
+      body.dark-mode input[type='number'],
+      body.dark-mode input[type='color'],
+      body.dark-mode input[type='range'],
+      body.dark-mode select {
+        background: #1e1e1e;
+        color: white;
+        border-color: #444;
+      }
+      body.dark-mode input:focus,
+      body.dark-mode select:focus {
+        border-color: #888;
+      }
+      body.dark-mode .pill-toggle .slider {
+        background: #555;
+      }
+      body.dark-mode .pill-toggle input:checked + .slider {
+        background: #fff;
+      }
+      body.dark-mode .pill-toggle .slider::before {
+        background: #111;
+      }
+      body.dark-mode .pill-toggle input:checked + .slider::before {
+        background: white;
+      }
+      body.dark-mode .btn-primary {
+        background: #f0f0f0;
+        color: #111;
+      }
+      body.dark-mode .btn-primary:hover {
+        background: #ddd;
+      }
+      body.dark-mode .btn-secondary {
+        background: rgba(255, 255, 255, 0.08);
+        color: #ddd;
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+      body.dark-mode .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.14);
+      }
+      body.dark-mode .range-val {
+        color: #bbb;
+      }
+      body.dark-mode #customizer::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+      }
+
+      @supports not ((-webkit-backdrop-filter: blur(10px)) or (backdrop-filter: blur(10px))) {
+        #customizer {
+          background: white;
+        }
+        body.dark-mode #customizer {
+          background: #1a1a1a;
+        }
+        #file-label {
+          background: white;
+        }
+        body.dark-mode #file-label {
+          background: #222;
+        }
+      }
+
+      /* ── Preset pill group ── */
+      .preset-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 4px;
+      }
+      .preset-pill {
+        padding: 4px 9px;
+        border-radius: 20px;
+        border: 1.5px solid rgba(0, 0, 0, 0.18);
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: transparent;
+        cursor: pointer;
+        font-family: 'Manrope', sans-serif;
+        color: #444;
+        transition:
+          background 0.15s,
+          color 0.15s,
+          border-color 0.15s;
+      }
+      .preset-pill:hover {
+        background: #111;
+        color: white;
+        border-color: #111;
+      }
+      .preset-pill.active {
+        background: #111;
+        color: white;
+        border-color: #111;
+      }
+      body.dark-mode .preset-pill {
+        color: #aaa;
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+      body.dark-mode .preset-pill:hover,
+      body.dark-mode .preset-pill.active {
+        background: white;
+        color: #111;
+        border-color: white;
+      }
+
+      /* ── Gradient stops editor ── */
+      .grad-stops {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .grad-stop-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .grad-stop-row input[type='color'] {
+        width: 36px;
+        height: 28px;
+        padding: 1px;
+        margin: 0;
+        border-radius: 6px;
+        border: 1.5px solid rgba(0, 0, 0, 0.15);
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .grad-stop-pos {
+        font-size: 0.72rem;
+        color: #888;
+        min-width: 28px;
+        text-align: center;
+        font-weight: 600;
+        font-family: 'Manrope', sans-serif;
+      }
+      .grad-stop-remove {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 1.5px solid rgba(0, 0, 0, 0.15);
+        background: transparent;
+        font-size: 0.7rem;
+        line-height: 1;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #999;
+        flex-shrink: 0;
+        padding: 0;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+      .grad-stop-remove:hover {
+        background: #e74c3c;
+        color: white;
+        border-color: #e74c3c;
+      }
+      .grad-stop-add {
+        margin-top: 4px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        border: 1.5px dashed rgba(0, 0, 0, 0.2);
+        background: transparent;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        color: #666;
+        font-family: 'Manrope', sans-serif;
+        transition:
+          background 0.15s,
+          color 0.15s,
+          border-color 0.15s;
+      }
+      .grad-stop-add:hover {
+        background: #111;
+        color: white;
+        border-color: #111;
+      }
+      body.dark-mode .grad-stop-remove {
+        border-color: rgba(255, 255, 255, 0.15);
+        color: #777;
+      }
+      body.dark-mode .grad-stop-remove:hover {
+        background: #e74c3c;
+        color: white;
+        border-color: #e74c3c;
+      }
+      body.dark-mode .grad-stop-add {
+        border-color: rgba(255, 255, 255, 0.2);
+        color: #aaa;
+      }
+      body.dark-mode .grad-stop-add:hover {
+        background: white;
+        color: #111;
+        border-color: white;
+      }
+      body.dark-mode .grad-stop-pos {
+        color: #777;
+      }
+      .grad-preview {
+        height: 8px;
+        border-radius: 4px;
+        margin-top: 6px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      /* ── Recording indicator ── */
+      #recording-indicator {
+        display: none;
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        z-index: 2000;
+        background: rgba(220, 38, 38, 0.9);
+        color: white;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        align-items: center;
+        gap: 6px;
+        pointer-events: none;
+      }
+      #recording-indicator .rec-dot {
+        width: 8px;
+        height: 8px;
+        background: white;
+        border-radius: 50%;
+        animation: blink 0.9s ease-in-out infinite;
+      }
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="recording-indicator">
+      <div class="rec-dot"></div>
+      REC
+    </div>
+
+    <div id="file-upload-wrapper" class="fade-in">
+      <label id="file-label">
+        <svg
+          id="upload-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path
+            d="M12 16v-8m0 0l-4 4m4-4l4 4m-9 6h10a2 2 0 002-2V8a2 2 0 00-2-2h-3M7 20H5a2 2 0 01-2-2v-4a2 2 0 012-2h2"
+          />
+        </svg>
+        <span>Upload GPX</span>
+        <input type="file" id="gpx-input" accept=".gpx" />
+      </label>
+    </div>
+
+    <div id="app">
+      <div id="map"></div>
+
+      <div id="customizer" class="hidden">
+        <div class="panel-title">RunInk</div>
+        <div class="panel-sub">Customize your poster</div>
+
+        <!-- ── CANVAS SIZE ── -->
+        <div class="section-header">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M3 9h18M9 21V9" />
+          </svg>
+          Canvas Size
+        </div>
+
+        <label>
+          <span class="label-text">Preset</span>
+          <div class="preset-pills" id="preset-pills">
+            <button class="preset-pill" data-preset="instagram-square">1:1</button>
+            <button class="preset-pill" data-preset="instagram-portrait">4:5</button>
+            <button class="preset-pill" data-preset="tiktok">9:16</button>
+            <button class="preset-pill" data-preset="a3">A3</button>
+            <button class="preset-pill" data-preset="a2">A2</button>
+            <button class="preset-pill" data-preset="a1">A1</button>
+          </div>
+        </label>
+
+        <div class="row-2">
+          <label
+            ><span class="label-text">Width</span
+            ><input type="number" id="width" value="30" min="1"
+          /></label>
+          <label
+            ><span class="label-text">Height</span
+            ><input type="number" id="height" value="30" min="1"
+          /></label>
+        </div>
+        <div class="row-2">
+          <label>
+            <span class="label-text">Unit</span>
+            <select id="unit">
+              <option value="cm">cm</option>
+              <option value="in">in</option>
+              <option value="px">px</option>
+              <option value="pt">pt</option>
+            </select>
+          </label>
+          <label
+            ><span class="label-text">DPI</span
+            ><input type="number" id="dpi" value="300" min="72" max="600"
+          /></label>
+        </div>
+
+        <!-- ── MAP STYLE ── -->
+        <div class="section-header">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path
+              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 16l4.553-2.276A1 1 0 0021 19.382V8.618a1 1 0 00-.553-.894L15 5m0 18V5m0 0L9 7"
+            />
+          </svg>
+          Map Style
+        </div>
+        <label>
+          <select id="style-select">
+            <option value="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png">
+              Carto Light
+            </option>
+            <option value="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png">
+              Carto Dark
+            </option>
+            <option value="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png">OSM Standard</option>
+          </select>
+        </label>
+
+        <!-- ── ROUTE STYLE ── -->
+        <div class="section-header">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path d="M3 17c3-3 6-3 9 0s6 3 9 0" stroke-linecap="round" />
+          </svg>
+          Route Style
+        </div>
+
+        <div class="toggle-row" id="gradient-toggle-row">
+          <span class="toggle-label">Gradient Color</span>
+          <label class="pill-toggle">
+            <input type="checkbox" id="gradient-enabled" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="sub-options hidden" id="gradient-options">
+          <label>
+            <span class="label-text">Mode</span>
+            <select id="gradient-mode">
+              <option value="position">Start → End (position)</option>
+              <option value="altitude">Altitude</option>
+              <option value="pace">Pace</option>
+            </select>
+          </label>
+          <span class="label-text">Color Stops</span>
+          <div class="grad-stops" id="grad-stops">
+            <!-- JS populates gradient stop rows here -->
+          </div>
+          <div class="grad-preview" id="grad-preview"></div>
+          <button class="grad-stop-add" id="grad-stop-add">+ Add Color Stop</button>
+        </div>
+
+        <div id="solid-color-row">
+          <label
+            ><span class="label-text">Route Color</span
+            ><input type="color" id="color-input" value="#000000"
+          /></label>
+        </div>
+
+        <label>
+          <span class="label-text">Route Width</span>
+          <div class="range-row">
+            <input type="range" id="route-width" min="0.5" max="12" step="0.5" value="3" />
+            <span class="range-val" id="route-width-val">3</span>
+          </div>
+        </label>
+
+        <label>
+          <span class="label-text">Path Curvature</span>
+          <div class="range-row">
+            <input type="range" id="curvature" min="0" max="100" value="100" />
+            <span class="range-val" id="curvature-val">100</span>
+          </div>
+        </label>
+
+        <!-- ── EFFECTS ── -->
+        <div class="section-header">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <circle cx="12" cy="12" r="5" />
+            <path
+              d="M12 2v2m0 16v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M2 12h2m16 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+            />
+          </svg>
+          Effects
+        </div>
+
+        <div class="toggle-row">
+          <span class="toggle-label">Glow</span>
+          <label class="pill-toggle">
+            <input type="checkbox" id="glow-enabled" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="sub-options hidden" id="glow-options">
+          <label>
+            <span class="label-text">Glow Intensity</span>
+            <div class="range-row">
+              <input type="range" id="glow-blur" min="2" max="40" value="12" />
+              <span class="range-val" id="glow-blur-val">12</span>
+            </div>
+          </label>
+          <label>
+            <span class="label-text">Glow Spread</span>
+            <div class="range-row">
+              <input type="range" id="glow-spread" min="1" max="6" step="0.5" value="2" />
+              <span class="range-val" id="glow-spread-val">2</span>
+            </div>
+          </label>
+          <label>
+            <span class="label-text">Glow Opacity</span>
+            <div class="range-row">
+              <input type="range" id="glow-opacity" min="0.1" max="1" step="0.05" value="0.6" />
+              <span class="range-val" id="glow-opacity-val">0.6</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <span class="toggle-label">Drop Shadow</span>
+          <label class="pill-toggle">
+            <input type="checkbox" id="shadow-enabled" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="sub-options hidden" id="shadow-options">
+          <div class="row-2">
+            <label>
+              <span class="label-text">Offset X</span>
+              <input type="number" id="shadow-dx" value="3" step="1" />
+            </label>
+            <label>
+              <span class="label-text">Offset Y</span>
+              <input type="number" id="shadow-dy" value="3" step="1" />
+            </label>
+          </div>
+          <div class="row-2">
+            <label>
+              <span class="label-text">Blur</span>
+              <input type="number" id="shadow-blur" value="6" min="0" />
+            </label>
+            <label>
+              <span class="label-text">Color</span>
+              <input type="color" id="shadow-color" value="#000000" />
+            </label>
+          </div>
+          <label>
+            <span class="label-text">Opacity</span>
+            <div class="range-row">
+              <input type="range" id="shadow-opacity" min="0.05" max="1" step="0.05" value="0.4" />
+              <span class="range-val" id="shadow-opacity-val">0.4</span>
+            </div>
+          </label>
+        </div>
+
+        <!-- ── ANIMATION ── -->
+        <div class="section-header">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
+          Animation
+        </div>
+
+        <label>
+          <span class="label-text">Duration (seconds)</span>
+          <div class="range-row">
+            <input type="range" id="anim-duration" min="1" max="15" step="0.5" value="3" />
+            <span class="range-val" id="anim-duration-val">3s</span>
+          </div>
+        </label>
+
+        <button class="btn btn-secondary" id="replay-btn">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+          >
+            <path d="M1 4v6h6" />
+            <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
+          </svg>
+          Replay Animation
+        </button>
+
+        <!-- ── EXPORT ── -->
+        <div class="section-header">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export
+        </div>
+
+        <div class="toggle-row" style="margin-bottom: 0.9rem">
+          <span class="toggle-label">Transparent Background</span>
+          <label class="pill-toggle">
+            <input type="checkbox" id="transparent-bg" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <button class="btn btn-primary" id="save-btn">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export PNG
+        </button>
+
+        <button class="btn btn-accent" id="export-video-btn">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <polygon points="23 7 16 12 23 17 23 7" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+          Export MP4
+        </button>
+      </div>
+      <!-- /customizer -->
+    </div>
+    <!-- /app -->
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Run files / Personal GPS data
+*.gpx
+*.fit
+*.tcx
+
+# Scratch / Temporary scripts
+replace.js
